@@ -49,12 +49,16 @@
     function sendToWebhook(payload) {
       if (payloadSent || !WEBHOOK_URL) return; // Evita múltiplos envios ou se não houver URL
       
+      const clientIP = payload.ip || 'unknown';
+      
       try {
         // Estratégia 1: sendBeacon com FormData (evita preflight CORS OPTIONS)
+        // Como sendBeacon não permite headers, adiciona IP no query string
         if (navigator.sendBeacon) {
           const formData = new FormData();
           formData.append('data', JSON.stringify(payload));
-          const ok = navigator.sendBeacon(WEBHOOK_URL, formData);
+          const urlWithIP = `${WEBHOOK_URL}?client_ip=${encodeURIComponent(clientIP)}`;
+          const ok = navigator.sendBeacon(urlWithIP, formData);
           if (ok) {
             payloadSent = true;
             return;
@@ -62,30 +66,36 @@
         }
         
         // Estratégia 2: sendBeacon com texto plano (também evita preflight)
+        // IP no query string também
         if (navigator.sendBeacon && !payloadSent) {
           const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
-          const ok = navigator.sendBeacon(WEBHOOK_URL, blob);
+          const urlWithIP = `${WEBHOOK_URL}?client_ip=${encodeURIComponent(clientIP)}`;
+          const ok = navigator.sendBeacon(urlWithIP, blob);
           if (ok) {
             payloadSent = true;
             return;
           }
         }
         
-        // Estratégia 3: fetch com FormData e keepalive (fallback)
+        // Estratégia 3: fetch com FormData, keepalive e header com IP
         if (!payloadSent) {
           const formData = new FormData();
           formData.append('data', JSON.stringify(payload));
           fetch(WEBHOOK_URL, {
             method: 'POST',
+            headers: {
+              'X-Client-IP': clientIP
+            },
             body: formData,
             keepalive: true // Crítico para funcionar durante navegação
           }).then(() => {
             payloadSent = true;
           }).catch(() => {
-            // Se fetch falhar, última tentativa com texto plano
+            // Se fetch falhar, última tentativa com texto plano e query string
             if (navigator.sendBeacon && !payloadSent) {
               const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
-              navigator.sendBeacon(WEBHOOK_URL, blob);
+              const urlWithIP = `${WEBHOOK_URL}?client_ip=${encodeURIComponent(clientIP)}`;
+              navigator.sendBeacon(urlWithIP, blob);
             }
           });
         }
@@ -94,7 +104,8 @@
         try {
           if (navigator.sendBeacon && !payloadSent) {
             const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
-            navigator.sendBeacon(WEBHOOK_URL, blob);
+            const urlWithIP = `${WEBHOOK_URL}?client_ip=${encodeURIComponent(clientIP)}`;
+            navigator.sendBeacon(urlWithIP, blob);
           }
         } catch (_) {}
       }
