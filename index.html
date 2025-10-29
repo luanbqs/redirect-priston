@@ -47,12 +47,23 @@
 
     // Envia dados para o webhook com múltiplas estratégias para mobile
     function sendToWebhook(payload) {
-      if (payloadSent) return; // Evita múltiplos envios
+      if (payloadSent || !WEBHOOK_URL) return; // Evita múltiplos envios ou se não houver URL
       
       try {
-        // Estratégia 1: sendBeacon (mais confiável para mobile durante navegação)
-        if (navigator.sendBeacon && WEBHOOK_URL && WEBHOOK_URL !== 'SEU_WEBHOOK_AQUI') {
-          const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        // Estratégia 1: sendBeacon com FormData (evita preflight CORS OPTIONS)
+        if (navigator.sendBeacon) {
+          const formData = new FormData();
+          formData.append('data', JSON.stringify(payload));
+          const ok = navigator.sendBeacon(WEBHOOK_URL, formData);
+          if (ok) {
+            payloadSent = true;
+            return;
+          }
+        }
+        
+        // Estratégia 2: sendBeacon com texto plano (também evita preflight)
+        if (navigator.sendBeacon && !payloadSent) {
+          const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
           const ok = navigator.sendBeacon(WEBHOOK_URL, blob);
           if (ok) {
             payloadSent = true;
@@ -60,28 +71,29 @@
           }
         }
         
-        // Estratégia 2: fetch com keepalive (funciona melhor em mobile)
-        if (WEBHOOK_URL && WEBHOOK_URL !== 'SEU_WEBHOOK_AQUI') {
+        // Estratégia 3: fetch com FormData e keepalive (fallback)
+        if (!payloadSent) {
+          const formData = new FormData();
+          formData.append('data', JSON.stringify(payload));
           fetch(WEBHOOK_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: formData,
             keepalive: true // Crítico para funcionar durante navegação
           }).then(() => {
             payloadSent = true;
           }).catch(() => {
-            // Se fetch falhar, tenta sendBeacon novamente
-            if (navigator.sendBeacon) {
-              const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+            // Se fetch falhar, última tentativa com texto plano
+            if (navigator.sendBeacon && !payloadSent) {
+              const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
               navigator.sendBeacon(WEBHOOK_URL, blob);
             }
           });
         }
       } catch (e) {
-        // Última tentativa com sendBeacon
+        // Última tentativa com sendBeacon e texto plano
         try {
-          if (navigator.sendBeacon && WEBHOOK_URL && WEBHOOK_URL !== 'SEU_WEBHOOK_AQUI') {
-            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+          if (navigator.sendBeacon && !payloadSent) {
+            const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
             navigator.sendBeacon(WEBHOOK_URL, blob);
           }
         } catch (_) {}
